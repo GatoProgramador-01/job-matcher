@@ -1,0 +1,112 @@
+[
+  {
+    "id": "j001",
+    "title": "Backend Developer — Node.js / TypeScript",
+    "company": "Acme Corp",
+    "location": "Remote — LatAm",
+    "remote": true,
+    "description": "We need a mid-level backend developer with Node.js, TypeScript, and PostgreSQL. Bonus if you know AWS Lambda and NestJS.",
+    "apply_url": "https://example.com/apply/j001",
+    "source": "greenhouse",
+    "posted_at": "2026-08-11"
+  },
+  {
+    "id": "j002",
+    "title": "Junior Python Developer",
+    "company": "StartupXYZ",
+    "location": "Remote",
+    "remote": true,
+    "description": "Junior Python developer for our Django backend. Remote friendly.",
+    "apply_url": "https://example.com/apply/j002",
+    "source": "lever",
+    "posted_at": "2026-08-10"
+  },
+  {
+    "id": "j003",
+    "title": "Senior Backend Engineer — LangGraph / RAG",
+    "company": "AI Startup",
+    "location": "Worldwide remote",
+    "remote": true,
+    "description": "Building multi-agent systems with LangGraph and Anthropic API. Python, FastAPI, PostgreSQL. Open to LatAm candidates.",
+    "apply_url": "https://example.com/apply/j003",
+    "source": "workable",
+    "posted_at": "2026-08-11"
+  },
+  {
+    "id": "j004",
+    "title": "Full Stack Developer",
+    "company": "US Only Corp",
+    "location": "US only",
+    "remote": false,
+    "description": "Must reside in the United States. React and Node.js.",
+    "apply_url": "https://example.com/apply/j004",
+    "source": "greenhouse",
+    "posted_at": "2026-08-09"
+  },
+  {
+    "id": "j005",
+    "title": "Salesforce Developer",
+    "company": "Enterprise Ltd",
+    "location": "Remote — Chile",
+    "remote": true,
+    "description": "Salesforce development and integration. CRM experience required.",
+    "apply_url": "https://example.com/apply/j005",
+    "source": "workday",
+    "posted_at": "2026-08-08"
+  },
+  {
+    "id": "j006",
+    "title": "Backend Developer — Python / Django",
+    "company": "Fintech Co",
+    "location": "Remote — Chile eligible",
+    "remote": true,
+    "description": "Mid-level backend developer with Django, PostgreSQL, and Docker. AWS Lambda experience a plus.",
+    "apply_url": "https://example.com/apply/j006",
+    "source": "lever",
+    "posted_at": "2026-08-07"
+  },
+  {
+    "id": "j007",
+    "title": "Staff Engineer — Microservices",
+    "company": "BigCo",
+    "location": "Remote anywhere",
+    "remote": true,
+    "description": "Staff-level microservices architect. Kubernetes, AWS ECS, NestJS, TypeScript.",
+    "apply_url": "https://example.com/apply/j007",
+    "source": "greenhouse",
+    "posted_at": "2026-08-05"
+  },
+  {
+    "id": "j008",
+    "title": "Backend Engineer — Node.js",
+    "company": "SaaS Inc",
+    "location": "Remote — Latin America",
+    "remote": true,
+    "description": "Semi-senior backend engineer with Node.js, MongoDB, and RabbitMQ. GraphQL is a plus.",
+    "apply_url": "https://example.com/apply/j008",
+    "source": "bamboohr",
+    "posted_at": "2026-08-11"
+  },
+  {
+    "id": "j009",
+    "title": "AI Backend Developer — LLM Integration",
+    "company": "LLM Startup",
+    "location": "Remote worldwide",
+    "remote": true,
+    "description": "Build LLM-powered features. Python, FastAPI, vector search, OpenAI API. Mid-level.",
+    "apply_url": "https://example.com/apply/j009",
+    "source": "lever",
+    "posted_at": "2026-08-10"
+  },
+  {
+    "id": "j010",
+    "title": "Internship — Java Developer",
+    "company": "Old Corp",
+    "location": "Remote — Chile",
+    "remote": true,
+    "description": "Java internship for recent graduates. Spring Boot.",
+    "apply_url": "https://example.com/apply/j010",
+    "source": "workday",
+    "posted_at": "2026-08-11"
+  }
+]
