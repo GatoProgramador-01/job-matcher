@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "last_updated": "YYYY-MM-DD",
+  "personal": {
+    "full_name": "Your Name",
+    "location": "Your City, Country",
+    "work_mode": "Remote",
+    "languages": {
+      "spanish": "Native",
+      "english": { "level": "C1" }
+    }
+  },
+  "summary": {
+    "en": "Brief professional summary."
+  },
+  "technical_skills": {
+    "backend": ["Python", "Node.js", "TypeScript"],
+    "cloud_devops": ["AWS", "Docker"],
+    "databases_messaging": ["PostgreSQL", "MongoDB"]
+  },
+  "job_search_criteria": {
+    "target_seniority": ["mid-level", "senior"],
+    "avoid_seniority": ["junior", "trainee"],
+    "salary_usd_monthly_remote": { "min": 2500, "max": 4000 },
+    "work_mode": "100% remote",
+    "preferred_keywords": ["Python", "Node.js", "AWS", "backend"],
+    "reject_keywords": ["US only", "on-site", "junior", "internship"]
+  },
+  "known_gaps": []
+}
