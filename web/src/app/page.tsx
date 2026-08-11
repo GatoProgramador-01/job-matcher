@@ -48,6 +48,11 @@ export default function Home() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           const data = JSON.parse(line.slice(6))
+          if (data.error) {
+            setError(data.error)
+            setStatus('error')
+            return
+          }
           if (data.node) setActiveNode(data.node)
           if (data.done_node) setDoneNodes(prev => [...prev, data.done_node])
           if (data.jobs) {

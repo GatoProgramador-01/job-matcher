@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start --port 3000"
+    "start": "next start --port 3000",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "next": "15.3.3",
@@ -13,11 +15,12 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4"
+    "typescript": "^5"
   }
 }

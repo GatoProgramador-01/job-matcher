@@ -1,6 +1,10 @@
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 # allow importing job_matcher from parent/src
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 

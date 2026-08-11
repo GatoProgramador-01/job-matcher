@@ -42,29 +42,32 @@ async def _stream_pipeline(profile_path: str) -> AsyncGenerator[str, None]:
         "output_format": "json",
     }
 
-    for event in pipeline.stream(initial_state):
-        node_name = next(iter(event))
-        state = event[node_name]
+    try:
+        for event in pipeline.stream(initial_state):
+            node_name = next(iter(event))
+            state = event[node_name]
 
-        yield f"data: {json.dumps({'node': node_name})}\n\n"
+            yield f"data: {json.dumps({'node': node_name})}\n\n"
 
-        if node_name == "rank":
-            top = state.get("top_jobs", [])
-            jobs_payload = [
-                {
-                    "score": round(j.score, 1),
-                    "title": j.job.title,
-                    "company": j.job.company,
-                    "posted_at": str(j.job.posted_at) if j.job.posted_at else None,
-                    "apply_url": j.job.apply_url,
-                    "skills": j.extracted.required_skills,
-                    "seniority": j.extracted.seniority,
-                }
-                for j in top
-            ]
-            yield f"data: {json.dumps({'done_node': node_name, 'jobs': jobs_payload})}\n\n"
-        else:
-            yield f"data: {json.dumps({'done_node': node_name})}\n\n"
+            if node_name == "rank":
+                top = state.get("top_jobs", [])
+                jobs_payload = [
+                    {
+                        "score": round(j.score, 1),
+                        "title": j.job.title,
+                        "company": j.job.company,
+                        "posted_at": str(j.job.posted_at) if j.job.posted_at else None,
+                        "apply_url": j.job.apply_url,
+                        "skills": j.extracted.required_skills,
+                        "seniority": j.extracted.seniority,
+                    }
+                    for j in top
+                ]
+                yield f"data: {json.dumps({'done_node': node_name, 'jobs': jobs_payload})}\n\n"
+            else:
+                yield f"data: {json.dumps({'done_node': node_name})}\n\n"
+    except Exception as exc:
+        yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 
 
 @router.post("/run")
