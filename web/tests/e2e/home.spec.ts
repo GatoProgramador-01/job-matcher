@@ -31,12 +31,12 @@ test.describe('Job Matcher home page', () => {
       })
     })
 
-    const btn = page.getByRole('button')
+    const btn = page.getByRole('button', { name: /Find matching jobs|Running pipeline/ })
     await btn.click()
 
     // Button label changes to running state
-    await expect(btn).toHaveText('Running pipeline…')
-    await expect(btn).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Running pipeline/ })).toHaveText('Running pipeline...')
+    await expect(page.getByRole('button', { name: /Running pipeline/ })).toBeDisabled()
   })
 
   test('pipeline status steps appear while running', async ({ page }) => {
@@ -48,7 +48,7 @@ test.describe('Job Matcher home page', () => {
       })
     })
 
-    await page.getByRole('button').click()
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
 
     // PipelineStatus renders all 5 step labels
     for (const label of ['Fetching jobs', 'Filtering', 'AI extraction', 'Scoring', 'Ranking']) {
@@ -65,7 +65,7 @@ test.describe('Job Matcher home page', () => {
       })
     })
 
-    await page.getByRole('button').click()
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
     await expect(page.getByText('HIRING_CAFE_URL not set')).toBeVisible()
     // Button returns to idle so user can retry
     await expect(page.getByRole('button', { name: 'Find matching jobs' })).toBeEnabled()
@@ -76,7 +76,7 @@ test.describe('Job Matcher home page', () => {
       route.fulfill({ status: 502, body: 'Backend error' })
     )
 
-    await page.getByRole('button').click()
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
     await expect(page.getByText('Backend unreachable')).toBeVisible()
   })
 
@@ -108,14 +108,14 @@ test.describe('Job Matcher home page', () => {
       })
     })
 
-    await page.getByRole('button').click()
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
 
     await expect(page.getByText('Senior LangGraph Engineer')).toBeVisible()
     await expect(page.getByText('Acme AI')).toBeVisible()
     await expect(page.getByText('87')).toBeVisible()
 
     // Apply link has noopener noreferrer (security check)
-    const applyLink = page.getByRole('link', { name: 'Apply →' })
+    const applyLink = page.getByRole('link', { name: 'Apply' })
     await expect(applyLink).toHaveAttribute('rel', 'noopener noreferrer')
     await expect(applyLink).toHaveAttribute('target', '_blank')
 
@@ -138,7 +138,7 @@ test.describe('Job Matcher home page', () => {
       })
     })
 
-    await page.getByRole('button').click()
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
     await expect(page.getByText('High Score')).toBeVisible()
 
     // Green score
@@ -152,5 +152,13 @@ test.describe('Job Matcher home page', () => {
     // Red score
     const redScore = page.locator('.text-red-400').first()
     await expect(redScore).toBeVisible()
+  })
+
+  test.skip('real pipeline run (requires DEEPSEEK_API_KEY)', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
+    await expect(page.locator('.text-green-400, .text-yellow-400, .text-red-400').first())
+      .toBeVisible({ timeout: 90_000 })
   })
 })

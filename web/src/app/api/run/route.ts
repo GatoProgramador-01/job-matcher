@@ -13,7 +13,23 @@ export async function POST(_req: NextRequest) {
     return new Response('Backend error', { status: 502 })
   }
 
-  return new Response(upstream.body, {
+  const reader = upstream.body.getReader()
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          controller.enqueue(value)
+        }
+      } finally {
+        controller.close()
+      }
+    },
+    cancel() { reader.cancel() },
+  })
+
+  return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
