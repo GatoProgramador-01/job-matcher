@@ -120,7 +120,7 @@ test.describe('Job Matcher home page', () => {
     await expect(applyLink).toHaveAttribute('target', '_blank')
 
     // Score heading visible
-    await expect(page.getByText('Top 1 matches')).toBeVisible()
+    await expect(page.getByText('1 of 1 matches')).toBeVisible()
   })
 
   test('score color: green for ≥70, yellow for ≥40, red for <40', async ({ page }) => {
@@ -160,5 +160,139 @@ test.describe('Job Matcher home page', () => {
     await page.getByRole('button', { name: 'Find matching jobs' }).click()
     await expect(page.locator('.text-green-400, .text-yellow-400, .text-red-400').first())
       .toBeVisible({ timeout: 90_000 })
+  })
+
+  test('clicking a job card opens the detail modal', async ({ page }) => {
+    const job = {
+      score: 87,
+      score_breakdown: { stack: 30, seniority: 20, ai_bonus: 20, recency: 17 },
+      title: 'Senior LangGraph Engineer',
+      company: 'Acme AI',
+      posted_at: '2026-08-10',
+      apply_url: 'https://example.com/apply/1',
+      skills: ['Python', 'LangGraph', 'FastAPI'],
+      seniority: 'senior',
+      description: 'Build LLM-powered multi-agent systems.',
+    }
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        body: `data: {"done_node":"rank","jobs":${JSON.stringify([job])}}\n\n`,
+      })
+    })
+
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
+    await expect(page.getByText('Senior LangGraph Engineer')).toBeVisible()
+
+    // The card is role=button — click it
+    await page.getByRole('button', { name: /Senior LangGraph Engineer/ }).click()
+
+    // Modal appears with dialog role
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByText('Build LLM-powered multi-agent systems.')).toBeVisible()
+    await expect(page.getByText('Stack match')).toBeVisible()
+  })
+
+  test('modal closes when close button is clicked', async ({ page }) => {
+    const job = {
+      score: 75,
+      score_breakdown: { stack: 25, seniority: 20, ai_bonus: 10, recency: 20 },
+      title: 'Backend Developer',
+      company: 'Co',
+      posted_at: null,
+      apply_url: 'https://example.com/apply/2',
+      skills: ['Python'],
+      seniority: 'mid',
+      description: 'Python backend role.',
+    }
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        body: `data: {"done_node":"rank","jobs":${JSON.stringify([job])}}\n\n`,
+      })
+    })
+
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
+    await page.getByRole('button', { name: /Backend Developer/ }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+
+    // Close via the × button
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expect(page.getByRole('dialog')).not.toBeVisible()
+  })
+
+  test('score filter hides jobs below threshold', async ({ page }) => {
+    const makeJob = (score: number, title: string, idx: number) => ({
+      score,
+      score_breakdown: { stack: score * 0.4, seniority: 10, ai_bonus: 5, recency: 5 },
+      title,
+      company: 'Co',
+      posted_at: null,
+      apply_url: `https://example.com/apply/${idx}`,
+      skills: [],
+      seniority: null,
+      description: '',
+    })
+
+    const jobs = [makeJob(85, 'High Score Job', 1), makeJob(30, 'Low Score Job', 2)]
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        body: `data: {"done_node":"rank","jobs":${JSON.stringify(jobs)}}\n\n`,
+      })
+    })
+
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
+    await expect(page.getByText('High Score Job')).toBeVisible()
+    await expect(page.getByText('Low Score Job')).toBeVisible()
+
+    // Apply ≥70 filter
+    await page.getByRole('button', { name: '≥70' }).click()
+
+    await expect(page.getByText('High Score Job')).toBeVisible()
+    await expect(page.getByText('Low Score Job')).not.toBeVisible()
+  })
+
+  test('pagination shows next page', async ({ page }) => {
+    const jobs = Array.from({ length: 10 }, (_, i) => ({
+      score: 70 + i,
+      score_breakdown: { stack: 20, seniority: 20, ai_bonus: 15, recency: 15 },
+      title: `Job ${i + 1}`,
+      company: 'Co',
+      posted_at: null,
+      apply_url: `https://example.com/apply/${i + 1}`,
+      skills: [],
+      seniority: null,
+      description: '',
+    }))
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+        body: `data: {"done_node":"rank","jobs":${JSON.stringify(jobs)}}\n\n`,
+      })
+    })
+
+    await page.getByRole('button', { name: 'Find matching jobs' }).click()
+
+    await expect(page.getByText('Job 1', { exact: true })).toBeVisible()
+    await expect(page.getByText('Job 10', { exact: true })).not.toBeVisible()
+    await expect(page.getByText('Page 1 of 2')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Next', exact: true }).click()
+
+    await expect(page.getByText('Job 10', { exact: true })).toBeVisible()
+    await expect(page.getByText('Job 1', { exact: true })).not.toBeVisible()
+    await expect(page.getByText('Page 2 of 2')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Previous', exact: true }).click()
+    await expect(page.getByText('Page 1 of 2')).toBeVisible()
   })
 })
