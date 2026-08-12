@@ -13,6 +13,10 @@ dependencies = [
     "pydantic>=2.0",
     "requests>=2.31",
     "python-dotenv>=1.0",
+    "beautifulsoup4>=4.12",
+    "pymongo>=4.6",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -30,3 +34,8 @@ include = ["job_matcher*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "langgraph-cli[inmem]>=0.4.31",
+]

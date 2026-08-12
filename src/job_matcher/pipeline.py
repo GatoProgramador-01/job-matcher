@@ -1,5 +1,5 @@
 from langgraph.graph import StateGraph, END
-from .models import MatcherState
+from .domain.models import MatcherState
 from .nodes.fetch import fetch_node
 from .nodes.filter_ import filter_node
 from .nodes.extract import extract_node

@@ -1,4 +1,6 @@
-from ..models import MatcherState, ScoredJob
+import json
+
+from ..domain.models import MatcherState, ScoredJob
 
 TOP_N = 10
 
@@ -16,7 +18,6 @@ def rank_node(state: MatcherState) -> dict:
 
 def _print_results(jobs: list[ScoredJob], fmt: str) -> None:
     if fmt == "json":
-        import json
         print(json.dumps([_to_dict(j) for j in jobs], indent=2, ensure_ascii=False))
         return
 

@@ -2,6 +2,9 @@ import argparse
 import os
 from dotenv import load_dotenv
 
+from .profile import load_profile
+from .pipeline import build_pipeline
+
 load_dotenv()
 
 
@@ -19,9 +22,6 @@ def main():
 
 
 def _run(args):
-    from .profile import load_profile
-    from .pipeline import build_pipeline
-
     profile = load_profile(args.profile)
     pipeline = build_pipeline()
 

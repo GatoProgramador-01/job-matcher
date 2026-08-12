@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { JobCard } from '@/components/JobCard'
 import { JobModal } from '@/components/JobModal'
-import { PipelineStatus } from '@/components/PipelineStatus'
+import { PipelineProgress } from '@/components/PipelineProgress'
 import { ScoreFilter } from '@/components/ScoreFilter'
 import type { Job } from '@/types/job'
+import { type PipelineRun, makePipelineRun } from '@/types/pipeline'
 
 const JOBS_PER_PAGE = 8
 
@@ -23,16 +24,29 @@ interface TokenStats {
 type Status = 'idle' | 'running' | 'done' | 'error'
 type FilterValue = 'all' | 70 | 40
 
+function updateNodeStatus(
+  run: PipelineRun,
+  nodeId: string,
+  status: 'running' | 'done',
+  summary: string | null,
+): PipelineRun {
+  return {
+    ...run,
+    nodes: run.nodes.map((n) =>
+      n.id === nodeId ? { ...n, status, summary } : n
+    ),
+  }
+}
+
 export default function Home() {
   const [status, setStatus] = useState<Status>('idle')
-  const [activeNode, setActiveNode] = useState<string | null>(null)
-  const [doneNodes, setDoneNodes] = useState<string[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [error, setError] = useState<string | null>(null)
   const [tokenStats, setTokenStats] = useState<TokenStats | null>(null)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [scoreFilter, setScoreFilter] = useState<FilterValue>('all')
+  const [pipelineRun, setPipelineRun] = useState<PipelineRun | null>(null)
 
   const filteredJobs = scoreFilter === 'all' ? jobs : jobs.filter((j) => j.score >= scoreFilter)
   const totalPages = Math.max(1, Math.ceil(filteredJobs.length / JOBS_PER_PAGE))
@@ -48,13 +62,12 @@ export default function Home() {
 
   async function runMatcher() {
     setStatus('running')
-    setActiveNode(null)
-    setDoneNodes([])
     setJobs([])
     setError(null)
     setTokenStats(null)
     setCurrentPage(1)
     setScoreFilter('all')
+    setPipelineRun(makePipelineRun())
 
     try {
       const resp = await fetch('/api/run', { method: 'POST' })
@@ -74,26 +87,65 @@ export default function Home() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           const data = JSON.parse(line.slice(6))
+
           if (data.error) {
             setError(data.error)
             setStatus('error')
+            setPipelineRun(null)
             return
           }
-          if (data.token_stats && Object.keys(data.token_stats).length > 0) {
-            setTokenStats(data.token_stats)
+
+          // node_start — emitted by extract_node via queue, or any node when it begins
+          if (data.node) {
+            setPipelineRun((prev) =>
+              prev ? updateNodeStatus(prev, data.node, 'running', null) : prev
+            )
+            if (data.node === 'extract' && data.total) {
+              setPipelineRun((prev) =>
+                prev
+                  ? { ...prev, extractProgress: { done: 0, total: data.total } }
+                  : prev
+              )
+            }
           }
-          if (data.node) setActiveNode(data.node)
-          if (data.done_node) setDoneNodes((prev) => [...prev, data.done_node])
+
+          // node_done
+          if (data.done_node) {
+            setPipelineRun((prev) =>
+              prev ? updateNodeStatus(prev, data.done_node, 'done', null) : prev
+            )
+            if (data.token_stats && Object.keys(data.token_stats).length > 0) {
+              setTokenStats(data.token_stats)
+            }
+          }
+
+          // per-job progress from extract_node
+          if (data.type === 'job_progress') {
+            setPipelineRun((prev) => {
+              if (!prev) return prev
+              return {
+                ...prev,
+                currentJobTitle: data.title as string,
+                currentJobSkills: (data.skills as string[]) ?? [],
+                extractProgress: { done: data.index as number, total: data.total as number },
+                totalTokens: prev.totalTokens + (data.tokens as number),
+                totalCost: prev.totalCost + (data.cost as number),
+              }
+            })
+          }
+
+          // final results
           if (data.jobs) {
-            setJobs(data.jobs)
+            setJobs(data.jobs as Job[])
             setStatus('done')
-            setActiveNode(null)
+            setPipelineRun(null)
           }
         }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
       setStatus('error')
+      setPipelineRun(null)
     }
   }
 
@@ -108,10 +160,22 @@ export default function Home() {
         </div>
         {tokenStats && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-xs text-gray-300 flex flex-wrap gap-4">
-            <div><span className="text-gray-500 block">LLM Cost</span><span className="font-semibold text-green-400">${tokenStats.estimated_cost_usd.toFixed(5)}</span></div>
-            <div><span className="text-gray-500 block">Tokens Used</span><span className="font-semibold text-white">{tokenStats.total_tokens.toLocaleString()}</span></div>
-            <div><span className="text-gray-500 block">Mongo Cache Hits</span><span className="font-semibold text-indigo-400">{tokenStats.cache_hits} jobs</span></div>
-            <div><span className="text-gray-500 block">Saved Tokens</span><span className="font-semibold text-purple-400">{tokenStats.saved_tokens.toLocaleString()}</span></div>
+            <div>
+              <span className="text-gray-500 block">LLM Cost</span>
+              <span className="font-semibold text-green-400">${tokenStats.estimated_cost_usd.toFixed(5)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Tokens Used</span>
+              <span className="font-semibold text-white">{tokenStats.total_tokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Mongo Cache Hits</span>
+              <span className="font-semibold text-indigo-400">{tokenStats.cache_hits} jobs</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Saved Tokens</span>
+              <span className="font-semibold text-purple-400">{tokenStats.saved_tokens.toLocaleString()}</span>
+            </div>
           </div>
         )}
       </div>
@@ -124,7 +188,8 @@ export default function Home() {
         >
           {status === 'running' ? 'Running pipeline...' : 'Find matching jobs'}
         </button>
-        {status === 'running' && <PipelineStatus activeNode={activeNode} doneNodes={doneNodes} />}
+
+        {pipelineRun && <PipelineProgress run={pipelineRun} />}
         {status === 'error' && <p className="text-red-400 text-sm">Error: {error}</p>}
       </div>
 

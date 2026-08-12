@@ -50,9 +50,10 @@ test.describe('Job Matcher home page', () => {
 
     await page.getByRole('button', { name: 'Find matching jobs' }).click()
 
-    // PipelineStatus renders all 5 step labels
-    for (const label of ['Fetching jobs', 'Filtering', 'AI extraction', 'Scoring', 'Ranking']) {
-      await expect(page.getByText(label)).toBeVisible()
+    // PipelineProgress renders all 5 node labels
+    const progress = page.locator('[data-testid="pipeline-progress"]')
+    for (const label of ['Fetch', 'Filter', 'Extract', 'Score', 'Rank']) {
+      await expect(progress.getByText(label)).toBeVisible()
     }
   })
 
@@ -294,5 +295,96 @@ test.describe('Job Matcher home page', () => {
 
     await page.getByRole('button', { name: 'Previous', exact: true }).click()
     await expect(page.getByText('Page 1 of 2')).toBeVisible()
+  })
+
+  test('pipeline shows progress card when node_start received', async ({ page }) => {
+    await page.route('/api/run', async (route) => {
+      const body = [
+        'data: {"node":"fetch","total":0}\n\n',
+        'data: {"done_node":"fetch","token_stats":{}}\n\n',
+      ].join('')
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body,
+      })
+    })
+
+    await page.click('button:has-text("Find matching jobs")')
+    await expect(page.locator('[data-testid="pipeline-progress"]')).toBeVisible()
+  })
+
+  test('extract progress bar advances on job_progress events', async ({ page }) => {
+    const events = [
+      'data: {"node":"extract","total":10}\n\n',
+      'data: {"type":"job_progress","index":1,"total":10,"title":"Senior Dev @ Acme","skills":["Python","FastAPI"],"tokens":300,"cost":0.0003,"cached":false}\n\n',
+      'data: {"type":"job_progress","index":2,"total":10,"title":"Mid Dev @ Beta","skills":["Go"],"tokens":280,"cost":0.00028,"cached":false}\n\n',
+      'data: {"type":"job_progress","index":3,"total":10,"title":"Junior Dev @ Gamma","skills":["Java"],"tokens":270,"cost":0.00027,"cached":false}\n\n',
+    ].join('')
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: events,
+      })
+    })
+
+    await page.click('button:has-text("Find matching jobs")')
+    await expect(page.locator('[data-testid="pipeline-progress"]')).toBeVisible()
+    await expect(page.locator('text=3/10').first()).toBeVisible()
+    await expect(page.locator('text=Junior Dev @ Gamma')).toBeVisible()
+  })
+
+  test('token counter updates on job_progress events', async ({ page }) => {
+    const events = [
+      'data: {"node":"extract","total":5}\n\n',
+      'data: {"type":"job_progress","index":1,"total":5,"title":"Dev A","skills":[],"tokens":200,"cost":0.0002,"cached":false}\n\n',
+      'data: {"type":"job_progress","index":2,"total":5,"title":"Dev B","skills":[],"tokens":200,"cost":0.0002,"cached":false}\n\n',
+    ].join('')
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: events,
+      })
+    })
+
+    await page.click('button:has-text("Find matching jobs")')
+    await expect(page.locator('[data-testid="pipeline-progress"]')).toBeVisible()
+    // 200 + 200 = 400 tokens
+    await expect(page.locator('text=400')).toBeVisible()
+  })
+
+  test('progress card disappears and job cards appear on done', async ({ page }) => {
+    const mockJob = {
+      score: 82.5,
+      score_breakdown: { stack: 40, seniority: 15, ai_bonus: 20, recency: 7.5 },
+      title: 'Senior Engineer',
+      company: 'TechCorp',
+      posted_at: '2026-08-10',
+      apply_url: 'https://techcorp.com/jobs/1',
+      skills: ['Python', 'FastAPI'],
+      seniority: 'senior',
+      description: 'A great role.',
+    }
+
+    const events = [
+      'data: {"node":"rank","total":0}\n\n',
+      `data: {"done_node":"rank","jobs":[${JSON.stringify(mockJob)}],"token_stats":{"total_tokens":1200,"cache_hits":2,"cache_misses":3,"estimated_cost_usd":0.00145,"prompt_tokens":900,"completion_tokens":300,"saved_tokens":1100,"estimated_saved_cost_usd":0.00040}}\n\n`,
+    ].join('')
+
+    await page.route('/api/run', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body: events,
+      })
+    })
+
+    await page.click('button:has-text("Find matching jobs")')
+    await expect(page.locator('[data-testid="pipeline-progress"]')).not.toBeVisible()
+    await expect(page.locator('text=Senior Engineer')).toBeVisible()
   })
 })

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from .models import ProfileData
+from .domain.models import ProfileData
 
 
 def load_profile(path: str) -> ProfileData:

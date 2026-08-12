@@ -7,9 +7,9 @@ Optimizations:
 3. Compact Truncation: Caps description payload to 1,200 chars (removes legal/boilerplate footer).
 4. Token Tracking: Accounts for prompt/completion tokens and estimated DeepSeek USD cost.
 5. Parallel Execution: Runs uncached extractions concurrently in a ThreadPool.
+6. Progress Queue: Emits per-job events into MatcherState.progress_queue when present.
 """
 import json
-import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,8 +18,9 @@ from typing import Any, Tuple
 from bs4 import BeautifulSoup
 from langchain_openai import ChatOpenAI
 
-from ..models import Job, ExtractedJob, MatcherState
-from ..mongo import mongo_db
+from ..domain.models import Job, ExtractedJob, MatcherState
+from ..infrastructure.deepseek import make_llm as _make_llm, PRICE_PROMPT as _PRICE_PROMPT, PRICE_COMPLETION as _PRICE_COMPLETION
+from ..infrastructure.mongo import mongo_db
 from ..token_tracker import TokenTracker
 
 _SYSTEM = (
@@ -40,7 +41,6 @@ _JSON_RE = re.compile(r'\{.*\}', re.DOTALL)
 
 
 def _clean_text(html_or_text: str) -> str:
-    """Strips HTML tags and normalizes whitespace."""
     if not html_or_text:
         return ""
     try:
@@ -51,17 +51,7 @@ def _clean_text(html_or_text: str) -> str:
     return " ".join(text.split())
 
 
-def _make_llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        model="deepseek-chat",
-        base_url="https://api.deepseek.com",
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        temperature=0,
-    )
-
-
 def _parse_response(text: str) -> dict:
-    """Extract the first JSON object from LLM response text."""
     m = _JSON_RE.search(text)
     if not m:
         raise ValueError(f"No JSON found in response: {text[:200]}")
@@ -69,12 +59,9 @@ def _parse_response(text: str) -> dict:
 
 
 def _extract_uncached_job(job: Job, llm: ChatOpenAI) -> Tuple[ExtractedJob, int, int]:
-    """
-    Invokes DeepSeek LLM for a single job and returns (ExtractedJob, prompt_tokens, completion_tokens).
-    """
     clean_desc = _clean_text(job.description)[:1200]
     prompt = f"Title: {job.title}\n\nDescription: {clean_desc}"
-    
+
     prompt_tokens = 0
     completion_tokens = 0
 
@@ -83,14 +70,12 @@ def _extract_uncached_job(job: Job, llm: ChatOpenAI) -> Tuple[ExtractedJob, int,
             {"role": "system", "content": _SYSTEM},
             {"role": "user", "content": prompt},
         ])
-        
-        # Extract token usage metadata from LangChain result
+
         if hasattr(result, "response_metadata") and isinstance(result.response_metadata, dict):
             usage = result.response_metadata.get("token_usage") or result.response_metadata.get("tokenUsage") or {}
             prompt_tokens = usage.get("prompt_tokens") or usage.get("promptTokens") or 0
             completion_tokens = usage.get("completion_tokens") or usage.get("completionTokens") or 0
 
-        # Fallback token estimation if metadata missing
         if prompt_tokens == 0:
             prompt_tokens = len(_SYSTEM) // 4 + len(prompt) // 4
         if completion_tokens == 0:
@@ -105,7 +90,6 @@ def _extract_uncached_job(job: Job, llm: ChatOpenAI) -> Tuple[ExtractedJob, int,
             latam_eligible=bool(data.get("latam_eligible", False)),
         )
 
-        # Save to MongoDB cache
         mongo_db.save_extraction(
             job_id=job.id,
             required_skills=extracted.required_skills,
@@ -122,10 +106,35 @@ def _extract_uncached_job(job: Job, llm: ChatOpenAI) -> Tuple[ExtractedJob, int,
         return ExtractedJob(job=job), prompt_tokens, completion_tokens
 
 
+def _emit_progress(
+    queue: Any,
+    index: int,
+    total: int,
+    job: Job,
+    skills: list[str],
+    prompt_tokens: int,
+    completion_tokens: int,
+    cached: bool,
+) -> None:
+    if queue is None:
+        return
+    tokens = prompt_tokens + completion_tokens
+    cost = round((prompt_tokens * _PRICE_PROMPT) + (completion_tokens * _PRICE_COMPLETION), 6)
+    queue.put({
+        "_type": "job_progress",
+        "index": index,
+        "total": total,
+        "title": job.title,
+        "skills": skills,
+        "tokens": tokens,
+        "cost": cost,
+        "cached": cached,
+    })
+
+
 def extract_node(state: MatcherState) -> dict:
     tracker = TokenTracker()
 
-    # Re-hydrate token tracker from existing state if present
     existing_stats = state.get("token_stats") or {}
     if existing_stats:
         tracker.prompt_tokens = existing_stats.get("prompt_tokens", 0)
@@ -135,11 +144,18 @@ def extract_node(state: MatcherState) -> dict:
         tracker.cache_misses = existing_stats.get("cache_misses", 0)
         tracker.saved_tokens = existing_stats.get("saved_tokens", 0)
 
+    queue = state.get("progress_queue")
     filtered_jobs = state["filtered_jobs"]
+    total = len(filtered_jobs)
+
+    if queue is not None:
+        queue.put({"_type": "node_start", "_node": "extract", "total": total})
+
     extracted_results: dict[str, ExtractedJob] = {}
     jobs_to_fetch_llm: list[Job] = []
+    progress_index = 0
 
-    # Step 1: Check MongoDB cache first for all filtered jobs
+    # Step 1: MongoDB cache check
     for job in filtered_jobs:
         cached = mongo_db.get_extraction(job.id)
         if cached:
@@ -151,17 +167,21 @@ def extract_node(state: MatcherState) -> dict:
                 is_remote=cached.get("is_remote", True),
                 latam_eligible=cached.get("latam_eligible", False),
             )
+            progress_index += 1
+            # Emit progress for cache hits: 0 tokens (already paid for)
+            _emit_progress(queue, progress_index, total, job,
+                           cached.get("required_skills") or [], 0, 0, cached=True)
         else:
             jobs_to_fetch_llm.append(job)
 
     print(
-        f"[extract] {len(filtered_jobs)} jobs total — "
-        f"{len(extracted_results)} hits from MongoDB cache, "
+        f"[extract] {total} jobs — "
+        f"{len(extracted_results)} cache hits, "
         f"{len(jobs_to_fetch_llm)} LLM extractions needed",
         file=sys.stderr,
     )
 
-    # Step 2: Fetch uncached extractions concurrently with ThreadPool
+    # Step 2: Parallel LLM extractions
     if jobs_to_fetch_llm:
         llm = _make_llm()
         max_threads = min(5, len(jobs_to_fetch_llm))
@@ -175,11 +195,15 @@ def extract_node(state: MatcherState) -> dict:
                     extracted_job, p_tokens, c_tokens = future.result()
                     extracted_results[job.id] = extracted_job
                     tracker.add_llm_usage(p_tokens, c_tokens)
+                    progress_index += 1
+                    _emit_progress(queue, progress_index, total, job,
+                                   extracted_job.required_skills, p_tokens, c_tokens, cached=False)
                 except Exception as exc:
                     print(f"[extract] Thread error for '{job.title}': {exc}", file=sys.stderr)
                     extracted_results[job.id] = ExtractedJob(job=job)
+                    progress_index += 1
+                    _emit_progress(queue, progress_index, total, job, [], 0, 0, cached=False)
 
-    # Maintain original order of filtered_jobs
     final_extracted = [extracted_results[j.id] for j in filtered_jobs if j.id in extracted_results]
 
     return {

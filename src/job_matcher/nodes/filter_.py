@@ -1,4 +1,4 @@
-from ..models import Job, ScoredJob, ExtractedJob, ProfileData, MatcherState
+from ..domain.models import Job, ScoredJob, ExtractedJob, ProfileData, MatcherState, ScoreBreakdown
 
 _REMOTE_SIGNALS = ["remote", "latam", "latin america", "chile", "worldwide", "anywhere"]
 
@@ -45,7 +45,9 @@ def apply_hard_filters(
 
         if reason:
             extracted = ExtractedJob(job=job)
-            discarded.append(ScoredJob(job=job, extracted=extracted, score=-999, discard_reason=reason))
+            zero_breakdown = ScoreBreakdown(stack=0.0, seniority=0.0, ai_bonus=0.0, recency=0.0)
+            discarded.append(ScoredJob(job=job, extracted=extracted, score=-999,
+                                       breakdown=zero_breakdown, discard_reason=reason))
         else:
             passed.append(job)
 
