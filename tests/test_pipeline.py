@@ -223,3 +223,151 @@ def test_full_pipeline_offline(tmp_path, monkeypatch):
     for sj in result["top_jobs"]:
         assert sj.score >= -20
         assert sj.breakdown is not None
+
+
+import queue as q_module
+
+
+# ── extract_node progress events ────────────────────────────────────────────
+
+def test_extract_node_emits_node_start_event(monkeypatch):
+    """First event in queue must be node_start with total count."""
+    from job_matcher.models import Job
+    from job_matcher.nodes.extract import extract_node
+
+    mock_result = MagicMock()
+    mock_result.content = '{"required_skills":["Go"],"seniority":"senior","is_remote":true,"latam_eligible":false}'
+    mock_result.response_metadata = {}
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = mock_result
+
+    jobs = [
+        Job(id=f"j{i}", title=f"Dev {i}", company="Co",
+            description="Go role.", apply_url=f"https://x.com/{i}")
+        for i in range(3)
+    ]
+    q = q_module.SimpleQueue()
+    state = {
+        "profile": ProfileData(preferred_keywords=["Go"], reject_keywords=[],
+                               target_seniority=[], avoid_seniority=[]),
+        "raw_jobs": [], "filtered_jobs": jobs, "extracted_jobs": [],
+        "scored_jobs": [], "top_jobs": [], "output_format": "json",
+        "token_stats": {}, "progress_queue": q,
+    }
+
+    with patch("job_matcher.nodes.extract._make_llm", return_value=mock_llm), \
+         patch("job_matcher.nodes.extract.mongo_db.get_extraction", return_value=None), \
+         patch("job_matcher.nodes.extract.mongo_db.save_extraction"):
+        extract_node(state)
+
+    first = q.get_nowait()
+    assert first["_type"] == "node_start"
+    assert first["_node"] == "extract"
+    assert first["total"] == 3
+
+
+def test_extract_node_emits_job_progress_per_job(monkeypatch):
+    """Queue receives one job_progress event per job (cached or LLM)."""
+    from job_matcher.models import Job
+    from job_matcher.nodes.extract import extract_node
+
+    mock_result = MagicMock()
+    mock_result.content = '{"required_skills":["Python"],"seniority":"mid","is_remote":true,"latam_eligible":false}'
+    mock_result.response_metadata = {}
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = mock_result
+
+    jobs = [
+        Job(id=f"j{i}", title=f"Dev {i}", company="Co",
+            description="Python role.", apply_url=f"https://x.com/{i}")
+        for i in range(4)
+    ]
+    q = q_module.SimpleQueue()
+    state = {
+        "profile": ProfileData(preferred_keywords=["Python"], reject_keywords=[],
+                               target_seniority=[], avoid_seniority=[]),
+        "raw_jobs": [], "filtered_jobs": jobs, "extracted_jobs": [],
+        "scored_jobs": [], "top_jobs": [], "output_format": "json",
+        "token_stats": {}, "progress_queue": q,
+    }
+
+    with patch("job_matcher.nodes.extract._make_llm", return_value=mock_llm), \
+         patch("job_matcher.nodes.extract.mongo_db.get_extraction", return_value=None), \
+         patch("job_matcher.nodes.extract.mongo_db.save_extraction"):
+        extract_node(state)
+
+    events = []
+    while not q.empty():
+        events.append(q.get_nowait())
+
+    progress_events = [e for e in events if e["_type"] == "job_progress"]
+    assert len(progress_events) == 4  # one per job
+
+
+def test_progress_event_has_required_fields(monkeypatch):
+    """Each job_progress event must have index, total, title, skills, tokens, cost, cached."""
+    from job_matcher.models import Job
+    from job_matcher.nodes.extract import extract_node
+
+    mock_result = MagicMock()
+    mock_result.content = '{"required_skills":["Rust"],"seniority":"senior","is_remote":true,"latam_eligible":false}'
+    mock_result.response_metadata = {}
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = mock_result
+
+    job = Job(id="r1", title="Rust Dev", company="Co",
+              description="Rust role.", apply_url="https://x.com/1")
+    q = q_module.SimpleQueue()
+    state = {
+        "profile": ProfileData(preferred_keywords=["Rust"], reject_keywords=[],
+                               target_seniority=[], avoid_seniority=[]),
+        "raw_jobs": [], "filtered_jobs": [job], "extracted_jobs": [],
+        "scored_jobs": [], "top_jobs": [], "output_format": "json",
+        "token_stats": {}, "progress_queue": q,
+    }
+
+    with patch("job_matcher.nodes.extract._make_llm", return_value=mock_llm), \
+         patch("job_matcher.nodes.extract.mongo_db.get_extraction", return_value=None), \
+         patch("job_matcher.nodes.extract.mongo_db.save_extraction"):
+        extract_node(state)
+
+    events = [q.get_nowait() for _ in range(q.qsize() + 2) if not q.empty()]
+    progress = next(e for e in events if e["_type"] == "job_progress")
+    assert "index" in progress
+    assert "total" in progress
+    assert "title" in progress
+    assert "skills" in progress
+    assert "tokens" in progress
+    assert "cost" in progress
+    assert "cached" in progress
+    assert progress["title"] == "Rust Dev"
+
+
+def test_extract_node_works_without_queue(monkeypatch):
+    """progress_queue absent from state must not raise."""
+    from job_matcher.models import Job
+    from job_matcher.nodes.extract import extract_node
+
+    mock_result = MagicMock()
+    mock_result.content = '{"required_skills":["Java"],"seniority":"mid","is_remote":true,"latam_eligible":false}'
+    mock_result.response_metadata = {}
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = mock_result
+
+    job = Job(id="j1", title="Java Dev", company="Co",
+              description="Java role.", apply_url="https://x.com/1")
+    state = {
+        "profile": ProfileData(preferred_keywords=["Java"], reject_keywords=[],
+                               target_seniority=[], avoid_seniority=[]),
+        "raw_jobs": [], "filtered_jobs": [job], "extracted_jobs": [],
+        "scored_jobs": [], "top_jobs": [], "output_format": "json",
+        "token_stats": {},
+        # progress_queue intentionally absent
+    }
+
+    with patch("job_matcher.nodes.extract._make_llm", return_value=mock_llm), \
+         patch("job_matcher.nodes.extract.mongo_db.get_extraction", return_value=None), \
+         patch("job_matcher.nodes.extract.mongo_db.save_extraction"):
+        result = extract_node(state)  # must not raise
+
+    assert len(result["extracted_jobs"]) == 1
