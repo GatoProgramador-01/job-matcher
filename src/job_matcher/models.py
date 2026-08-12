@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any, Literal
 from pydantic import BaseModel, Field
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, NotRequired
 
 
 class Job(BaseModel):
@@ -57,3 +57,4 @@ class MatcherState(TypedDict):
     top_jobs: list[ScoredJob]
     output_format: Literal["table", "json"]
     token_stats: dict[str, Any]
+    progress_queue: NotRequired[Any]  # queue.SimpleQueue | None — absent = no progress streaming
