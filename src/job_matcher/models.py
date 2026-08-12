@@ -26,10 +26,18 @@ class ExtractedJob(BaseModel):
     latam_eligible: bool = False
 
 
+class ScoreBreakdown(BaseModel):
+    stack: float
+    seniority: float
+    ai_bonus: float
+    recency: float
+
+
 class ScoredJob(BaseModel):
     job: Job
     extracted: ExtractedJob
     score: float
+    breakdown: ScoreBreakdown | None = None
     discard_reason: str | None = None
 
 
@@ -49,4 +57,3 @@ class MatcherState(TypedDict):
     top_jobs: list[ScoredJob]
     output_format: Literal["table", "json"]
     token_stats: dict[str, Any]
-
