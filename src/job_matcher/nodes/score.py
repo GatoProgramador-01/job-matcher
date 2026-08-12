@@ -1,5 +1,5 @@
 from datetime import date
-from ..models import ExtractedJob, ScoredJob, ProfileData, MatcherState
+from ..models import ExtractedJob, ScoredJob, ScoreBreakdown, ProfileData, MatcherState
 
 _TIER_A = ["langgraph", "multi-agent", "anthropic", "rag", "agentic", "vector search", "langchain"]
 _TIER_B = ["openai", "llm", "machine learning", "embedding", " ai "]
@@ -54,29 +54,25 @@ def _recency_score(extracted: ExtractedJob, today: date) -> float:
     return 0.0
 
 
-def score_job(extracted: ExtractedJob, profile: ProfileData, today: date) -> float:
-    total = (
-        _stack_score(extracted, profile.preferred_keywords)
-        + _seniority_score(extracted)
-        + _ai_bonus(extracted)
-        + _recency_score(extracted, today)
-    )
-    return max(-20.0, min(100.0, total))
+def score_job(
+    extracted: ExtractedJob, profile: ProfileData, today: date
+) -> tuple[float, ScoreBreakdown]:
+    stack = _stack_score(extracted, profile.preferred_keywords)
+    seniority = _seniority_score(extracted)
+    ai_bonus = _ai_bonus(extracted)
+    recency = _recency_score(extracted, today)
+    total = max(-20.0, min(100.0, stack + seniority + ai_bonus + recency))
+    return total, ScoreBreakdown(stack=stack, seniority=seniority, ai_bonus=ai_bonus, recency=recency)
 
 
 def score_node(state: MatcherState) -> dict:
     profile = state["profile"]
     today = date.today()
-    scored = [
-        ScoredJob(
-            job=e.job,
-            extracted=e,
-            score=score_job(e, profile, today),
-        )
-        for e in state["extracted_jobs"]
-    ]
+    scored = []
+    for e in state["extracted_jobs"]:
+        total, breakdown = score_job(e, profile, today)
+        scored.append(ScoredJob(job=e.job, extracted=e, score=total, breakdown=breakdown))
     return {
         "scored_jobs": scored,
         "token_stats": state.get("token_stats", {}),
     }
-
