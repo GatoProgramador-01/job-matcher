@@ -37,7 +37,7 @@ class ScoredJob(BaseModel):
     job: Job
     extracted: ExtractedJob
     score: float
-    breakdown: ScoreBreakdown
+    breakdown: ScoreBreakdown | None = None
     discard_reason: str | None = None
 
 

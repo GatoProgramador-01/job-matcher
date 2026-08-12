@@ -88,6 +88,50 @@ def fetch_jobs(
     return []
 
 
+# ── RemoteOK ──────────────────────────────────────────────────────────────────
+
+_REMOTEOK_API = "https://remoteok.com/api"
+
+
+def _normalize_remoteok(raw: dict) -> dict:
+    url = raw.get("url", "") or raw.get("apply_url", "")
+    tags: list[str] = raw.get("tags") or []
+    body = raw.get("description", "")
+    description = ("Skills: " + ", ".join(tags) + "\n\n" + body) if tags else body
+    return {
+        "id": "rok_" + str(raw.get("id", _job_id(url))),
+        "title": raw.get("position", ""),
+        "company": raw.get("company", ""),
+        "location": "Remote",
+        "remote": True,
+        "description": description,
+        "apply_url": url,
+        "source": "remoteok",
+        "posted_at": (raw.get("date") or "")[:10] or None,
+    }
+
+
+def fetch_remoteok() -> list[dict]:
+    """Fetch remote job listings from RemoteOK's public API (no auth required).
+
+    Non-fatal: returns [] on any HTTP or parse error so the pipeline continues
+    with Remotive results.
+    """
+    try:
+        resp = requests.get(
+            _REMOTEOK_API,
+            timeout=20,
+            headers={"User-Agent": "Mozilla/5.0 (job-matcher bot)"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # First element is {"legal": "..."} metadata — filter by presence of "position"
+        jobs = [item for item in data if isinstance(item, dict) and "position" in item]
+        return [_normalize_remoteok(j) for j in jobs]
+    except Exception:
+        return []
+
+
 def load_cache(path: str = CACHE_PATH) -> set[str]:
     p = Path(path)
     if not p.exists():
