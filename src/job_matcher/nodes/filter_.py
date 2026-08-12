@@ -2,6 +2,17 @@ from ..models import Job, ScoredJob, ExtractedJob, ProfileData, MatcherState
 
 _REMOTE_SIGNALS = ["remote", "latam", "latin america", "chile", "worldwide", "anywhere"]
 
+# Non-tech title signals — reject roles that are clearly not engineering
+_NON_TECH_TITLES = [
+    "sales", "marketing", "copywriter", "graphic designer", " designer",
+    "recruiter", "hr ", "human resource", "accountant", "finance",
+    "customer success", "customer support", "jedi",
+    "communications", "content writer", "content reviewer", "social media",
+    "writer", "patient care", "medical", "office assistant",
+    "bookkeeper", "billing", "paralegal", "legal assistant",
+    "virtual assistant", "transcription", "data entry",
+]
+
 
 def _text(job: Job) -> str:
     return f"{job.title} {job.description} {job.location or ''}".lower()
@@ -17,10 +28,16 @@ def apply_hard_filters(
         text = _text(job)
         reason = None
 
-        for kw in profile.reject_keywords:
-            if kw.lower() in text:
-                reason = f"reject_keyword:{kw}"
-                break
+        # Reject clearly non-engineering titles
+        title_lower = job.title.lower()
+        if any(sig in title_lower for sig in _NON_TECH_TITLES):
+            reason = "non_tech_title"
+
+        if reason is None:
+            for kw in profile.reject_keywords:
+                if kw.lower() in text:
+                    reason = f"reject_keyword:{kw}"
+                    break
 
         if reason is None:
             if not any(sig in text for sig in _REMOTE_SIGNALS):
@@ -38,4 +55,8 @@ def apply_hard_filters(
 def filter_node(state: MatcherState) -> dict:
     jobs = [Job(**r) for r in state["raw_jobs"]]
     passed, _ = apply_hard_filters(jobs, state["profile"])
-    return {"filtered_jobs": passed}
+    return {
+        "filtered_jobs": passed,
+        "token_stats": state.get("token_stats", {}),
+    }
+

@@ -14,6 +14,17 @@ interface Job {
   seniority: string | null
 }
 
+interface TokenStats {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  cache_hits: number
+  cache_misses: number
+  saved_tokens: number
+  estimated_cost_usd: number
+  estimated_saved_cost_usd: number
+}
+
 type Status = 'idle' | 'running' | 'done' | 'error'
 
 export default function Home() {
@@ -22,6 +33,7 @@ export default function Home() {
   const [doneNodes, setDoneNodes] = useState<string[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [tokenStats, setTokenStats] = useState<TokenStats | null>(null)
 
   async function runMatcher() {
     setStatus('running')
@@ -29,6 +41,7 @@ export default function Home() {
     setDoneNodes([])
     setJobs([])
     setError(null)
+    setTokenStats(null)
 
     try {
       const resp = await fetch('/api/run', { method: 'POST' })
@@ -53,6 +66,9 @@ export default function Home() {
             setStatus('error')
             return
           }
+          if (data.token_stats && Object.keys(data.token_stats).length > 0) {
+            setTokenStats(data.token_stats)
+          }
           if (data.node) setActiveNode(data.node)
           if (data.done_node) setDoneNodes(prev => [...prev, data.done_node])
           if (data.jobs) {
@@ -70,11 +86,34 @@ export default function Home() {
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-12">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white">Job Matcher</h1>
-        <p className="text-gray-400 mt-1">
-          LangGraph + DeepSeek · hiring.cafe · top 10 jobs ranked for your profile
-        </p>
+      <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Job Matcher</h1>
+          <p className="text-gray-400 mt-1">
+            LangGraph + DeepSeek · MongoDB Storage & Cache · Top matches ranked for your profile
+          </p>
+        </div>
+
+        {tokenStats && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-xs text-gray-300 flex flex-wrap gap-4">
+            <div>
+              <span className="text-gray-500 block">LLM Cost</span>
+              <span className="font-semibold text-green-400">${tokenStats.estimated_cost_usd.toFixed(5)}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Tokens Used</span>
+              <span className="font-semibold text-white">{tokenStats.total_tokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Mongo Cache Hits</span>
+              <span className="font-semibold text-indigo-400">{tokenStats.cache_hits} jobs</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block">Saved Tokens</span>
+              <span className="font-semibold text-purple-400">{tokenStats.saved_tokens.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-6 mb-10">

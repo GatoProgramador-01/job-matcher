@@ -1,16 +1,25 @@
 import os
 from ..fetcher import fetch_jobs, load_cache, save_cache
 from ..models import MatcherState
+from ..mongo import mongo_db
+from ..token_tracker import TokenTracker
 
 
 def fetch_node(state: MatcherState) -> dict:
-    base_url = os.environ["HIRING_CAFE_URL"]
-    raw = fetch_jobs(base_url)
+    base_url = os.environ.get("HIRING_CAFE_URL", "https://hiring.cafe")
+    raw = fetch_jobs(base_url, limit=100)
 
+    # Persist raw jobs to MongoDB if enabled
+    mongo_db.save_raw_jobs(raw)
+
+    # Update local cache
     seen = load_cache()
-    new_jobs = [j for j in raw if j["id"] not in seen]
-
-    seen.update(j["id"] for j in new_jobs)
+    seen.update(j["id"] for j in raw)
     save_cache(seen)
 
-    return {"raw_jobs": new_jobs}
+    tracker = TokenTracker()
+    return {
+        "raw_jobs": raw,
+        "token_stats": tracker.to_dict(),
+    }
+

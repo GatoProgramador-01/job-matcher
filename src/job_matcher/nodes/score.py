@@ -75,4 +75,8 @@ def score_node(state: MatcherState) -> dict:
         )
         for e in state["extracted_jobs"]
     ]
-    return {"scored_jobs": scored}
+    return {
+        "scored_jobs": scored,
+        "token_stats": state.get("token_stats", {}),
+    }
+

@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from job_matcher.mongo import mongo_db
 from job_matcher.pipeline import build_pipeline
 from job_matcher.profile import load_profile
 
@@ -31,6 +33,7 @@ async def _stream_pipeline(profile_path: str) -> AsyncGenerator[str, None]:
     path = _safe_profile_path(profile_path)
     profile = load_profile(str(path))
     pipeline = build_pipeline()
+    run_id = f"run_{uuid.uuid4().hex[:8]}"
 
     initial_state = {
         "profile": profile,
@@ -40,14 +43,16 @@ async def _stream_pipeline(profile_path: str) -> AsyncGenerator[str, None]:
         "scored_jobs": [],
         "top_jobs": [],
         "output_format": "json",
+        "token_stats": {},
     }
 
     try:
         for event in pipeline.stream(initial_state):
             node_name = next(iter(event))
             state = event[node_name]
+            token_stats = state.get("token_stats") or {}
 
-            yield f"data: {json.dumps({'node': node_name})}\n\n"
+            yield f"data: {json.dumps({'node': node_name, 'token_stats': token_stats})}\n\n"
 
             if node_name == "rank":
                 top = state.get("top_jobs", [])
@@ -63,9 +68,21 @@ async def _stream_pipeline(profile_path: str) -> AsyncGenerator[str, None]:
                     }
                     for j in top
                 ]
-                yield f"data: {json.dumps({'done_node': node_name, 'jobs': jobs_payload})}\n\n"
+
+                # Record completed run to MongoDB
+                mongo_db.record_pipeline_run(
+                    run_id=run_id,
+                    profile_name=path.name,
+                    jobs_fetched=len(state.get("raw_jobs", [])),
+                    jobs_filtered=len(state.get("filtered_jobs", [])),
+                    jobs_extracted_new=token_stats.get("cache_misses", 0),
+                    jobs_cached_hits=token_stats.get("cache_hits", 0),
+                    token_stats=token_stats,
+                )
+
+                yield f"data: {json.dumps({'done_node': node_name, 'jobs': jobs_payload, 'token_stats': token_stats})}\n\n"
             else:
-                yield f"data: {json.dumps({'done_node': node_name})}\n\n"
+                yield f"data: {json.dumps({'done_node': node_name, 'token_stats': token_stats})}\n\n"
     except Exception as exc:
         yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 

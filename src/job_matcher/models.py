@@ -48,3 +48,5 @@ class MatcherState(TypedDict):
     scored_jobs: list[ScoredJob]
     top_jobs: list[ScoredJob]
     output_format: Literal["table", "json"]
+    token_stats: dict[str, Any]
+

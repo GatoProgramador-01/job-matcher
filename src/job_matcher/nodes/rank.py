@@ -7,7 +7,11 @@ def rank_node(state: MatcherState) -> dict:
     sorted_jobs = sorted(state["scored_jobs"], key=lambda j: j.score, reverse=True)
     top = sorted_jobs[:TOP_N]
     _print_results(top, state["output_format"])
-    return {"top_jobs": top}
+    return {
+        "top_jobs": top,
+        "token_stats": state.get("token_stats", {}),
+    }
+
 
 
 def _print_results(jobs: list[ScoredJob], fmt: str) -> None:
