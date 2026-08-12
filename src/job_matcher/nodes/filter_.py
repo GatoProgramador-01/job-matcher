@@ -1,4 +1,4 @@
-from ..models import Job, ScoredJob, ExtractedJob, ProfileData, MatcherState, ScoreBreakdown
+from ..domain.models import Job, ScoredJob, ExtractedJob, ProfileData, MatcherState, ScoreBreakdown
 
 _REMOTE_SIGNALS = ["remote", "latam", "latin america", "chile", "worldwide", "anywhere"]
 

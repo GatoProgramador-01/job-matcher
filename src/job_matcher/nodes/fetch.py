@@ -1,8 +1,8 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
-from ..fetcher import fetch_jobs, fetch_remoteok, load_cache, save_cache
-from ..models import MatcherState
-from ..mongo import mongo_db
+from ..infrastructure.hiring_cafe import fetch_jobs, fetch_remoteok, load_cache, save_cache
+from ..domain.models import MatcherState
+from ..infrastructure.mongo import mongo_db
 from ..token_tracker import TokenTracker
 
 

@@ -1,6 +1,6 @@
 import json
 
-from ..models import MatcherState, ScoredJob
+from ..domain.models import MatcherState, ScoredJob
 
 TOP_N = 10
 

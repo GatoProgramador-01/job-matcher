@@ -10,7 +10,6 @@ Optimizations:
 6. Progress Queue: Emits per-job events into MatcherState.progress_queue when present.
 """
 import json
-import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,8 +18,9 @@ from typing import Any, Tuple
 from bs4 import BeautifulSoup
 from langchain_openai import ChatOpenAI
 
-from ..models import Job, ExtractedJob, MatcherState
-from ..mongo import mongo_db
+from ..domain.models import Job, ExtractedJob, MatcherState
+from ..infrastructure.deepseek import make_llm as _make_llm, PRICE_PROMPT as _PRICE_PROMPT, PRICE_COMPLETION as _PRICE_COMPLETION
+from ..infrastructure.mongo import mongo_db
 from ..token_tracker import TokenTracker
 
 _SYSTEM = (
@@ -39,10 +39,6 @@ _SYSTEM = (
 
 _JSON_RE = re.compile(r'\{.*\}', re.DOTALL)
 
-# DeepSeek pricing (matches token_tracker.py constants)
-_PRICE_PROMPT = 0.14 / 1_000_000
-_PRICE_COMPLETION = 1.10 / 1_000_000
-
 
 def _clean_text(html_or_text: str) -> str:
     if not html_or_text:
@@ -53,15 +49,6 @@ def _clean_text(html_or_text: str) -> str:
     except Exception:
         text = re.sub(r'<[^>]+>', ' ', html_or_text)
     return " ".join(text.split())
-
-
-def _make_llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        model="deepseek-chat",
-        base_url="https://api.deepseek.com",
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        temperature=0,
-    )
 
 
 def _parse_response(text: str) -> dict:
