@@ -1,4 +1,4 @@
-# Design Spec: Real-Time Pipeline Streaming (Sprint 2A)
+# Design Spec: Real-Time Pipeline Streaming (Sprint 2A) + Hexagonal Refactor
 
 **Date:** 2026-08-12  
 **Status:** Approved  
@@ -321,3 +321,67 @@ Existing results grid, ScoreFilter, pagination, and JobModal are unchanged.
 - No streaming from `fetch_node`, `filter_node`, `score_node`, or `rank_node` — these are fast enough that a single `node_complete` event suffices.
 - No real-time cost breakdown chart — totals only in the progress card.
 - No changes to existing `ScoreFilter`, `JobModal`, or pagination components.
+
+---
+
+## LangGraph Pipeline Graph
+
+Generated with `pipeline.get_graph().draw_mermaid_png()` — saved at `docs/graph.png`.
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+    __start__([__start__]):::first
+    fetch(fetch)
+    filter(filter)
+    extract(extract)
+    score(score)
+    rank(rank)
+    __end__([__end__]):::last
+    __start__ --> fetch;
+    fetch --> filter;
+    filter --> extract;
+    extract --> score;
+    score --> rank;
+    rank --> __end__;
+    classDef default fill:#f2f0ff,line-height:1.2
+    classDef first fill-opacity:0
+    classDef last fill:#bfb6fc
+```
+
+To regenerate PNG: `uv run python -c "from src.job_matcher.pipeline import build_pipeline; open('docs/graph.png','wb').write(build_pipeline().get_graph().draw_mermaid_png())"`
+
+---
+
+## Architecture: Hexagonal (Ports & Adapters) — added 2026-08-12
+
+```
+src/job_matcher/
+├── domain/              # pure Python — zero infra imports
+│   ├── models.py        # Pydantic models + MatcherState TypedDict
+│   ├── ports.py         # Protocol ABCs: JobFetcher, ExtractionCache, RawJobStore
+│   └── scoring.py       # pure scoring functions (score_job, _stack_score, ...)
+├── infrastructure/      # concrete adapters implementing ports
+│   ├── mongo.py         # MongoStorage (ExtractionCache + RawJobStore)
+│   ├── hiring_cafe.py   # Remotive + RemoteOK HTTP fetchers (JobFetcher)
+│   └── deepseek.py      # make_llm() factory + PRICE_PROMPT/COMPLETION constants
+├── application/nodes/   # LangGraph nodes — orchestration only
+│   ├── fetch.py         # fetch_node — calls infrastructure.hiring_cafe
+│   ├── filter_.py       # filter_node — pure, uses domain.models
+│   ├── extract.py       # extract_node — SSE progress queue, calls infra
+│   ├── score.py         # score_node — delegates to domain.scoring.score_job
+│   └── rank.py          # rank_node — pure sort + print
+├── models.py            # backward-compat shim → domain.models
+├── fetcher.py           # backward-compat shim → infrastructure.hiring_cafe
+├── mongo.py             # backward-compat shim → infrastructure.mongo
+├── pipeline.py          # builds LangGraph StateGraph
+├── profile.py           # loads profile.json → ProfileData
+└── cli.py               # thin entrypoint (all imports at top level)
+```
+
+LangGraph Studio config: `langgraph.json` at repo root.
+To launch: `npx @langchain/langgraph-cli dev` (requires Node.js 18+).
