@@ -65,7 +65,7 @@ def test_fetch_remoteok_skips_metadata_element():
     mock_resp.json.return_value = REMOTEOK_SAMPLE
     mock_resp.raise_for_status = MagicMock()
 
-    with patch("job_matcher.fetcher.requests.get", return_value=mock_resp):
+    with patch("job_matcher.infrastructure.hiring_cafe.requests.get", return_value=mock_resp):
         jobs = fetch_remoteok()
 
     assert len(jobs) == 2  # metadata dict skipped
@@ -73,7 +73,7 @@ def test_fetch_remoteok_skips_metadata_element():
 
 
 def test_fetch_remoteok_returns_empty_on_http_error():
-    with patch("job_matcher.fetcher.requests.get", side_effect=Exception("timeout")):
+    with patch("job_matcher.infrastructure.hiring_cafe.requests.get", side_effect=Exception("timeout")):
         jobs = fetch_remoteok()
     assert jobs == []
 
