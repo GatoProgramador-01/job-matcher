@@ -50,9 +50,10 @@ test.describe('Job Matcher home page', () => {
 
     await page.getByRole('button', { name: 'Find matching jobs' }).click()
 
-    // PipelineStatus renders all 5 step labels
-    for (const label of ['Fetching jobs', 'Filtering', 'AI extraction', 'Scoring', 'Ranking']) {
-      await expect(page.getByText(label)).toBeVisible()
+    // PipelineProgress renders all 5 node labels
+    const progress = page.locator('[data-testid="pipeline-progress"]')
+    for (const label of ['Fetch', 'Filter', 'Extract', 'Score', 'Rank']) {
+      await expect(progress.getByText(label)).toBeVisible()
     }
   })
 
@@ -294,5 +295,22 @@ test.describe('Job Matcher home page', () => {
 
     await page.getByRole('button', { name: 'Previous', exact: true }).click()
     await expect(page.getByText('Page 1 of 2')).toBeVisible()
+  })
+
+  test('pipeline shows progress card when node_start received', async ({ page }) => {
+    await page.route('/api/run', async (route) => {
+      const body = [
+        'data: {"node":"fetch","total":0}\n\n',
+        'data: {"done_node":"fetch","token_stats":{}}\n\n',
+      ].join('')
+      await route.fulfill({
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+        body,
+      })
+    })
+
+    await page.click('button:has-text("Find matching jobs")')
+    await expect(page.locator('[data-testid="pipeline-progress"]')).toBeVisible()
   })
 })
