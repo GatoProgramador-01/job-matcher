@@ -59,12 +59,19 @@ async def _stream_pipeline(profile_path: str) -> AsyncGenerator[str, None]:
                 jobs_payload = [
                     {
                         "score": round(j.score, 1),
+                        "score_breakdown": {
+                            "stack": round(j.breakdown.stack, 1),
+                            "seniority": round(j.breakdown.seniority, 1),
+                            "ai_bonus": round(j.breakdown.ai_bonus, 1),
+                            "recency": round(j.breakdown.recency, 1),
+                        } if j.breakdown else None,
                         "title": j.job.title,
                         "company": j.job.company,
                         "posted_at": str(j.job.posted_at) if j.job.posted_at else None,
                         "apply_url": j.job.apply_url,
                         "skills": j.extracted.required_skills,
                         "seniority": j.extracted.seniority,
+                        "description": j.job.description,
                     }
                     for j in top
                 ]
