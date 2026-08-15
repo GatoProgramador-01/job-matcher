@@ -5,7 +5,7 @@ Runs extract -> score -> rank against 5 golden profile+job-batch scenarios.
 Measures whether the pipeline returns the expected top jobs in its top 3.
 
 Usage:
-    .venv\Scripts\python.exe evals/run_ranking_eval.py
+    .venv/Scripts/python.exe evals/run_ranking_eval.py
 
 Results appear in LangSmith under Experiments -> ranking-*
 Estimated cost: ~$0.002 (5 scenarios x 8 jobs each x DeepSeek pricing)

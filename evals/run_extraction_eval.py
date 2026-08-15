@@ -5,7 +5,7 @@ Runs DeepSeek against the 25 golden job postings and scores results
 with four deterministic metrics (Jaccard skill overlap + 3 exact-match).
 
 Usage:
-    .venv\Scripts\python.exe evals/run_extraction_eval.py
+    .venv/Scripts/python.exe evals/run_extraction_eval.py
 
 Results appear in LangSmith under Experiments -> extraction-*
 Estimated cost: ~$0.003 (25 jobs x DeepSeek pricing)
