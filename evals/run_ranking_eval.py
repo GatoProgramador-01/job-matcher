@@ -29,7 +29,7 @@ from evals.evaluators.ranking import precision_at_3
 def ranking_target(inputs: dict) -> dict:
     profile = ProfileData(**inputs["profile"])
     jobs = [
-        Job(**{**j, "apply_url": j.get("apply_url", "https://eval.local")})
+        Job(**{"company": "eval", **j, "apply_url": j.get("apply_url", "https://eval.local")})
         for j in inputs["jobs"]
     ]
 

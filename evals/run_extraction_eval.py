@@ -29,6 +29,7 @@ def extraction_target(inputs: dict) -> dict:
     job = Job(
         id=inputs["id"],
         title=inputs["title"],
+        company=inputs.get("company", "eval"),
         description=inputs["description"],
         apply_url="https://eval.local",
     )
