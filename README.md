@@ -248,7 +248,7 @@ open('docs/graph.png','wb').write(build_pipeline().get_graph().draw_mermaid_png(
 ## Testing
 
 ```bash
-# Full suite (37 tests, no network required — all I/O mocked)
+# Full suite (63 tests, no network required — all I/O mocked)
 uv run python -m pytest tests/ -v
 
 # Single file
@@ -263,6 +263,47 @@ Test coverage areas:
 | `test_filter.py` | Hard filter rules: reject keywords, non-tech titles, remote eligibility |
 | `test_score.py` | Scoring formula: stack overlap, seniority bonuses, AI tier, recency, caps |
 | `test_pipeline.py` | Fetcher normalization, dedup, cache roundtrip, extract node SSE events, full offline pipeline |
+| `test_evaluators_extraction.py` | skill_overlap Jaccard, seniority/remote/latam exact-match evaluators |
+| `test_evaluators_ranking.py` | precision@3: hits, partial hits, misses, edge cases |
+
+---
+
+## Evals (LangSmith)
+
+A three-layer evaluation harness tracks model quality and ranking correctness. See **[docs/evals.md](docs/evals.md)** for the full reference.
+
+| Layer | What it measures | Evaluator | Cost | Frequency |
+|---|---|---|---|---|
+| 1 — Extraction | Skill Jaccard + seniority/remote/LATAM exact match | Deterministic Python | ~$0.003 | Every PR |
+| 2 — Ranking | `precision@3` — are the right jobs in the top 3? | Deterministic Python | ~$0.002 | Every PR |
+| 3 — Semantic | Are the top jobs defensible for the profile? | LLM-as-judge (DeepSeek-chat) | ~$0.01 | Nightly |
+
+### Quick start
+
+```bash
+# 1. Add LangSmith vars to .env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_PROJECT=job-matcher
+
+# 2. Upload golden datasets (once)
+.venv/Scripts/python.exe evals/upload_datasets.py
+
+# 3. Run Layer 1 — extraction accuracy (25 examples, ~12 s)
+.venv/Scripts/python.exe evals/run_extraction_eval.py
+
+# 4. Run Layer 2 — ranking quality (5 scenarios, ~5 s)
+.venv/Scripts/python.exe evals/run_ranking_eval.py
+```
+
+Results appear in LangSmith under **Experiments** as `extraction-*` and `ranking-*`. Layer 3 runs from the LangSmith **Evaluator Playground** — the full prompt is in [docs/evals.md § Layer 3](docs/evals.md#layer-3--llm-as-judge-langsmith-evaluator-playground).
+
+### Datasets
+
+| Dataset | Size | What's in it |
+|---|---|---|
+| `job-matcher-extraction-v1` | 25 examples | Hand-crafted job postings with known-correct extraction (skills, seniority, remote, LATAM) |
+| `job-matcher-ranking-v1` | 5 scenarios | Profile + 8-job batch with expected top-job IDs — stress tests AI bonus, seniority penalties, recency tie-break |
 
 ---
 
@@ -316,5 +357,6 @@ job-matcher/
 | CI/CD | 2026-08-12 | GitHub Actions: pytest + tsc + Playwright |
 | Hexagonal Refactor | 2026-08-12 | domain/ + infrastructure/ + application/ layers, import discipline, 37 tests |
 | LangGraph Studio | 2026-08-12 | `langgraph.json`, `scripts/langgraph_dev.py`, `docs/graph.png` |
+| Evals + LangSmith | 2026-08-15 | Two-layer eval harness, 30 golden examples, 5 metrics, LangSmith Experiments, Layer 3 LLM-judge prompt, 63 tests |
 
 </details>

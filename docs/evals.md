@@ -4,16 +4,17 @@ This document explains the two-layer evaluation harness: how the golden datasets
 
 ---
 
-## Why Two Layers
+## Why Three Layers
 
-The pipeline has two distinct failure modes that need separate tests:
+The pipeline has three distinct failure modes requiring different measurement approaches:
 
-| Failure | Where it manifests | Layer |
-|---|---|---|
-| DeepSeek extracts the wrong skills or seniority from a description | `extract_node` output | Layer 1 |
-| The scoring + ranking logic surfaces the wrong jobs for a profile | Final `top_jobs` list | Layer 2 |
+| Layer | Failure caught | Method | Cost/run | When to run |
+|---|---|---|---|---|
+| 1 — Extraction accuracy | DeepSeek extracts wrong skills / seniority | Deterministic (Jaccard + exact match) | ~$0.003 | Every PR |
+| 2 — Ranking quality | Scoring formula surfaces wrong jobs | Deterministic (precision@3) | ~$0.002 | Every PR |
+| 3 — Semantic correctness | Right jobs ranked but wrong reasoning visible | LLM-as-judge (DeepSeek-chat) | ~$0.01 | Nightly / on demand |
 
-Layer 1 catches model regressions (prompt drift, DeepSeek version changes). Layer 2 catches scoring formula bugs and weight calibration issues. A bug in Layer 2 won't appear in Layer 1 metrics because extraction can be perfect while ranking is broken.
+Layer 1 catches model regressions (prompt drift, DeepSeek version changes). Layer 2 catches scoring formula bugs and weight calibration issues. Layer 3 catches failures that are numerically correct but semantically wrong — a case where `precision_at_3 = 1.0` but the model got lucky by coincidence. Layer 3 runs in LangSmith's **Evaluator Playground**, not in code.
 
 ---
 
@@ -297,6 +298,82 @@ To add these evals to a CI gate, add a step after the test suite:
 Layer 1 costs ~$0.003 and takes ~15 seconds — cheap enough for every PR. Layer 2 costs ~$0.002 and takes ~5 seconds.
 
 A CI gate on average `skill_overlap ≥ 0.75` catches prompt drift before it reaches production. Set thresholds in the LangSmith Dataset settings under **Rules**.
+
+---
+
+## Layer 3 — LLM-as-Judge (LangSmith Evaluator Playground)
+
+Layer 3 uses DeepSeek-chat as a judge inside the LangSmith UI. It evaluates ranking quality semantically — not just whether the right IDs appeared, but whether the pipeline's reasoning (scores, ordering) is defensible for the given profile.
+
+### Where to configure it
+
+1. Open LangSmith → **Datasets** → `job-matcher-ranking-v1`
+2. Open any experiment (e.g. `ranking-c3d660b1`)
+3. Click **Evaluator Playground** → **Add Evaluator**
+4. Set **Model**: `ChatDeepSeek / deepseek-chat`
+5. Set **Feedback key**: `ranking_correctness`
+6. Set **Output type**: Boolean
+7. Paste the prompt below into the **User** message field
+
+### Evaluator prompt
+
+Copy this entire block into the LangSmith **User** message field exactly as shown. The `{{input}}`, `{{output}}`, and `{{referenceOutput}}` placeholders are resolved automatically by LangSmith for each example.
+
+```
+You are an expert technical recruiter and LLM evaluator. You assess whether an AI-powered job ranking pipeline correctly prioritized roles for a candidate's profile.
+
+<Rubric>
+A correct ranking (return true):
+- Every job ID listed in referenceOutput.expected_top_ids appears in the first 3 entries of output.top_jobs.
+- The top 3 jobs have titles or extracted skills that directly overlap with the candidate's preferred_keywords.
+- The seniority level of each top-3 job falls within the candidate's target_seniority list, not in avoid_seniority.
+
+Return false when any of the following is true:
+- One or more expected_top_ids are absent from the top 3 of output.top_jobs.
+- A job in the top 3 belongs to a seniority level listed in avoid_seniority (e.g., junior, intern, staff, principal) and a better-matched job was available in the batch.
+- A job in the top 3 has no meaningful skill overlap with preferred_keywords while expected jobs with clear overlap were ranked lower.
+- The top 3 contains a role in a fundamentally different tech stack than the profile requests (e.g., a Java role when the profile specifies Python).
+</Rubric>
+
+<Instructions>
+1. Read input.profile: note preferred_keywords, target_seniority, and avoid_seniority.
+2. Read referenceOutput.expected_top_ids — these are the gold-standard correct answers.
+3. Extract the first 3 entries from output.top_jobs. Only these 3 positions matter.
+4. For each expected ID: check if it appears in those 3 positions. If any is missing, the ranking is wrong.
+5. For each top-3 job: check seniority against avoid_seniority and check skill overlap with preferred_keywords.
+6. Return true only if all expected IDs are present AND no disqualifying seniority or skill mismatch exists in the top 3.
+</Instructions>
+
+<Reminder>
+Focus on whether the right jobs surfaced at the top — not on exact score values or position within the top 3. A score of 75 vs 70 is irrelevant; what matters is whether the correct job IDs appear in the first 3 results. Do not penalize the pipeline for ranking two tied jobs in either order when both are expected.
+</Reminder>
+
+<input>
+{{input}}
+</input>
+
+<output>
+{{output}}
+</output>
+
+<referenceOutput>
+{{referenceOutput}}
+</referenceOutput>
+```
+
+### Why this prompt works
+
+| Design choice | Reason |
+|---|---|
+| Boolean output (not 0–1 float) | Ranking correctness is binary for this use case — either the expected jobs are in the top 3 or they are not |
+| `expected_top_ids` as the anchor | The Rubric ties directly to the golden dataset's `outputs` field — no ambiguity about what "correct" means |
+| Seniority and skill checks as tiebreakers | Catches the case where `precision_at_3 = 1.0` but by coincidence — the judge verifies the reasons |
+| "Do not penalize tied jobs" reminder | The scoring formula produces ties; the judge should not fail a run because `j1` ranked above `j5` when both are expected |
+| DeepSeek-chat as judge | Same model used by the pipeline — catches cases where the judge and the pipeline agree on skill labels |
+
+### What to do with results
+
+After running the evaluator on an experiment, LangSmith shows a `ranking_correctness` column per example (true/false). Any `false` row is a ranking failure — click the row to see the full trace: which job was expected, what actually ranked in its place, and what scores each received. This gives you the exact input to fix in `score_node` or the extraction prompt.
 
 ---
 
