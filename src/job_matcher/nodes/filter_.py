@@ -1,3 +1,22 @@
+"""
+Filter node — hard rule-based job rejection before LLM extraction.
+
+Reads:   state["raw_jobs"]       (list[dict] — raw job dicts from fetch_node)
+         state["profile"]        (ProfileData — provides reject_keywords)
+Writes:  state["filtered_jobs"]  (list[Job] — jobs that passed all filters)
+         state["token_stats"]    (forwarded unchanged from fetch_node)
+
+Filtering rules applied in order:
+  1. Non-tech title signals (sales, marketing, medical, etc.) -> discard
+  2. Profile reject_keywords found anywhere in title+description+location -> discard
+  3. No remote signal in title+description+location -> discard
+     (signals: remote, latam, latin america, chile, worldwide, anywhere)
+
+Failure modes:
+  - No side effects. Purely in-memory filtering.
+  - A job with an empty description passes rule 3 only if its title/location
+    contains a remote signal.
+"""
 from ..domain.models import Job, ScoredJob, ExtractedJob, ProfileData, MatcherState, ScoreBreakdown
 
 _REMOTE_SIGNALS = ["remote", "latam", "latin america", "chile", "worldwide", "anywhere"]
