@@ -1,13 +1,25 @@
 """
-Extract node — uses DeepSeek chat + MongoDB cache + parallel worker threads.
+Extract node — LLM-powered skill and seniority extraction.
 
-Optimizations:
-1. MongoDB LLM Cache: Returns cached extractions instantly (0 API tokens used).
-2. HTML Sanitization: Strips HTML tags so prompt is clean plain text.
-3. Compact Truncation: Caps description payload to 1,200 chars (removes legal/boilerplate footer).
-4. Token Tracking: Accounts for prompt/completion tokens and estimated DeepSeek USD cost.
-5. Parallel Execution: Runs uncached extractions concurrently in a ThreadPool.
-6. Progress Queue: Emits per-job events into MatcherState.progress_queue when present.
+Reads:   state["filtered_jobs"]  (list[Job])
+Writes:  state["extracted_jobs"] (list[ExtractedJob] — with required_skills,
+                                   seniority, is_remote, latam_eligible)
+         state["token_stats"]    (prompt/completion tokens, cache hits, USD cost)
+
+Side effects:
+  - Reads  MongoDB extractions collection for each job_id (cache check)
+  - Writes MongoDB extractions on every new LLM call (save result)
+  - Emits per-job events into state["progress_queue"] if present (SSE streaming)
+
+Performance:
+  - Cache hits: 0 API tokens, near-zero latency
+  - Cache misses: parallel ThreadPoolExecutor (max 5 workers)
+  - Job description truncated to 1200 chars + HTML stripped before LLM call
+
+Failure modes:
+  - LLM returns malformed JSON: falls back to ExtractedJob with empty fields (logged)
+  - DEEPSEEK_API_KEY missing: raises KeyError at make_llm() before any jobs processed
+  - MongoDB down: cache check returns None (all jobs go to LLM), save is skipped silently
 """
 import json
 import re

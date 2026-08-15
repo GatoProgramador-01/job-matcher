@@ -1,3 +1,19 @@
+"""
+Rank node — sort scored jobs and emit final top-N results.
+
+Reads:   state["scored_jobs"]   (list[ScoredJob])
+         state["output_format"] ("table" | "json")
+Writes:  state["top_jobs"]      (list[ScoredJob] — top 10 by score, desc)
+         state["token_stats"]   (forwarded unchanged)
+
+Side effects:
+  - Prints results to stdout in table or JSON format (for CLI use)
+  - No MongoDB writes, no LLM calls
+
+Failure modes:
+  - Empty scored_jobs: returns empty top_jobs (no crash)
+  - output_format not json: falls through to table format
+"""
 import json
 
 from ..domain.models import MatcherState, ScoredJob

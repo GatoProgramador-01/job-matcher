@@ -17,6 +17,7 @@ dependencies = [
     "pymongo>=4.6",
     "fastapi>=0.110",
     "uvicorn>=0.27",
+    "langsmith>=0.1",
 ]
 
 [project.optional-dependencies]
