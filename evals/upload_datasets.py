@@ -2,7 +2,7 @@
 Upload golden JSONL datasets to LangSmith.
 
 Run once per dataset version:
-    .venv\Scripts\python.exe evals/upload_datasets.py
+    .venv/Scripts/python.exe evals/upload_datasets.py
 
 Re-run after adding or correcting examples.
 Requires LANGSMITH_API_KEY and LANGSMITH_TRACING=true in .env
@@ -16,9 +16,11 @@ load_dotenv()
 
 from langsmith import Client
 
+_ROOT = Path(__file__).parent.parent
+
 DATASETS = {
-    "job-matcher-extraction-v1": Path("evals/datasets/extraction_golden.jsonl"),
-    "job-matcher-ranking-v1":    Path("evals/datasets/ranking_golden.jsonl"),
+    "job-matcher-extraction-v1": _ROOT / "evals" / "datasets" / "extraction_golden.jsonl",
+    "job-matcher-ranking-v1":    _ROOT / "evals" / "datasets" / "ranking_golden.jsonl",
 }
 
 

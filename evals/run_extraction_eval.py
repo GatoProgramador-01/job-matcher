@@ -19,9 +19,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langsmith import evaluate
-from src.job_matcher.domain.models import Job
-from src.job_matcher.nodes.extract import _extract_uncached_job
-from src.job_matcher.infrastructure.deepseek import make_llm
+from job_matcher.domain.models import Job
+from job_matcher.nodes.extract import _extract_uncached_job
+from job_matcher.infrastructure.deepseek import make_llm
 from evals.evaluators.extraction import skill_overlap, seniority_match, remote_match, latam_match
 
 
