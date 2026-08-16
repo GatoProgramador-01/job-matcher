@@ -305,15 +305,30 @@ Results appear in LangSmith under **Experiments** as `extraction-*` and `ranking
 | `job-matcher-extraction-v1` | 25 examples | Hand-crafted job postings with known-correct extraction (skills, seniority, remote, LATAM) |
 | `job-matcher-ranking-v1` | 5 scenarios | Profile + 8-job batch with expected top-job IDs — stress tests AI bonus, seniority penalties, recency tie-break |
 
+### CI gate
+
+Layers 1 and 2 run automatically on every pull request to `master`. Both scripts exit 1 on regression, blocking the merge.
+
+| Metric | Threshold | Blocks PR |
+|---|---|---|
+| `skill_overlap` | ≥ 0.75 | yes |
+| `seniority_match` | ≥ 0.80 | yes |
+| `remote_match` | ≥ 0.90 | yes |
+| `latam_match` | ≥ 0.90 | yes |
+| `precision_at_3` | = 1.00 | yes |
+
+Required secrets in GitHub → Settings → Secrets: `LANGSMITH_API_KEY`, `DEEPSEEK_API_KEY`.
+
 ---
 
 ## CI / CD
 
-GitHub Actions runs on every push to `master` and `feat/**`:
+GitHub Actions runs on every push to `master` and `feat/**`, plus eval checks on every PR:
 
 ```
-backend  →  uv sync --extra dev  →  pytest 37 tests
-frontend →  npm install (Node 24) →  tsc --noEmit  →  Playwright E2E
+backend  →  pytest 63 tests
+evals    →  Layer 1 (extraction) + Layer 2 (ranking) — PR only, exits 1 on regression
+frontend →  tsc --noEmit  →  Playwright E2E
 ```
 
 ---
