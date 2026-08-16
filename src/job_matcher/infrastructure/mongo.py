@@ -112,6 +112,26 @@ class MongoStorage:
             print(f"[mongo] Failed to save extraction for {job_id}: {exc}", file=sys.stderr)
             return False
 
+    # ── Cache Stats ───────────────────────────────────────────────────────────
+
+    def cache_stats(self) -> dict[str, Any]:
+        """Return counts for each collection and token spend from the most recent run."""
+        if not self.enabled or self.db is None:
+            return {"enabled": False}
+        try:
+            last_run = self.db["pipeline_runs"].find_one(
+                sort=[("timestamp", pymongo.DESCENDING)]
+            )
+            return {
+                "enabled": True,
+                "extractions_cached": self.db["extractions"].count_documents({}),
+                "raw_jobs_stored": self.db["raw_jobs"].count_documents({}),
+                "pipeline_runs": self.db["pipeline_runs"].count_documents({}),
+                "last_run_tokens": last_run.get("token_stats", {}) if last_run else {},
+            }
+        except Exception as exc:
+            return {"enabled": True, "error": str(exc)}
+
     # ── Pipeline Runs & Token Metrics ─────────────────────────────────────────
 
     def record_pipeline_run(
