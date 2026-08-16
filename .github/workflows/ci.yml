@@ -64,6 +64,7 @@ jobs:
       - name: Layer 1 — extraction accuracy
         run: uv run python evals/run_extraction_eval.py
         env:
+          PYTHONPATH: ${{ github.workspace }}
           LANGSMITH_TRACING: "true"
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: job-matcher-ci
@@ -73,6 +74,7 @@ jobs:
       - name: Layer 2 — ranking quality
         run: uv run python evals/run_ranking_eval.py
         env:
+          PYTHONPATH: ${{ github.workspace }}
           LANGSMITH_TRACING: "true"
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: job-matcher-ci
