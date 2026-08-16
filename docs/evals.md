@@ -24,13 +24,14 @@ Layer 1 catches model regressions (prompt drift, DeepSeek version changes). Laye
 evals/
 ├── datasets/
 │   ├── extraction_golden.jsonl   # 25 hand-crafted extraction examples
-│   └── ranking_golden.jsonl      # 5 end-to-end ranking scenarios
+│   └── ranking_golden.jsonl      # 5 end-to-end ranking scenarios (IDs prefixed s1-/s2-..)
 ├── evaluators/
 │   ├── extraction.py             # skill_overlap, seniority_match, remote_match, latam_match
 │   └── ranking.py                # precision_at_3
 ├── upload_datasets.py            # pushes both JSONL files to LangSmith as named Datasets
 ├── run_extraction_eval.py        # Layer 1 runner
-└── run_ranking_eval.py           # Layer 2 runner
+├── run_ranking_eval.py           # Layer 2 runner
+└── run_ranking_llm_eval.py       # Layer 3 runner (LLM-as-judge via DeepSeek-chat)
 ```
 
 ---
@@ -97,7 +98,7 @@ Each scenario gives a `profile` (what the candidate wants) and a batch of 8 jobs
     "jobs": [ ... 8 jobs ... ]
   },
   "outputs": {
-    "expected_top_ids": ["j1", "j3"]
+    "expected_top_ids": ["s1-j1", "s1-j3"]
   }
 }
 ```
@@ -106,11 +107,21 @@ The 5 scenarios each stress a different part of the scoring formula:
 
 | Scenario | What it tests |
 |---|---|
-| AI-stack bonus | `preferred_keywords` matching LangChain/RAG triggers +10/+20 bonus |
-| Seniority penalties | junior and intern jobs score -20; staff/principal score -10 |
-| Niche AI keywords | RAG/vector-search in title vs. only in description — both should score high |
-| Recency tie-break | Two identical-skill jobs; the one posted 10 days ago beats the 50-day-old one |
-| All-bad batch | No job is a strong match; system still ranks; score floor is meaningful |
+| 1 — Recency tie-break | Two identical-skill jobs; the one posted 10 days ago beats the 50-day-old one |
+| 2 — Seniority penalties | junior and intern jobs score -20; staff/principal score -10 |
+| 3 — AI-stack bonus | `preferred_keywords` matching LangChain/RAG triggers +10/+20 bonus |
+| 4 — All-bad batch | No job is a strong match; system still ranks; score floor is meaningful |
+| 5 — Mixed AI batch | LangChain/RAG jobs beat plain FastAPI even at the same seniority |
+
+#### Job ID convention — why IDs are prefixed `s1-`, `s2-`, …
+
+Every job ID in the ranking dataset is prefixed with its scenario number (e.g. `s2-j8`). This is a hard requirement, not a style choice.
+
+**The bug that made this necessary:** the original dataset used plain IDs `j1`–`j8` across all five scenarios. The `extract_node` inside `ranking_target` writes extraction results to MongoDB keyed by job ID. When Scenario 1 ran first and cached `j8 → seniority=junior`, every subsequent scenario using ID `j8` received that wrong extraction from cache — even though Scenario 2's `j8` was a completely different job description ("Senior FastAPI Python Engineer"). The stale cache entry propagated a -20 seniority penalty into Scenario 2, pushing `j8` out of the top 3 and causing `precision_at_3 = 0.5` and a judge verdict of `false`.
+
+The Layer 3 LLM judge caught this when the deterministic `precision_at_3` only flagged it as a score (0.5) without a reason. Inspecting the LangSmith trace showed `j8` with `seniority=junior` — clearly a cache hit from Scenario 1.
+
+**Rule:** every job ID in `ranking_golden.jsonl` must be globally unique across all scenarios. The `sN-` prefix guarantees this. If you add a Scenario 6, use `s6-j1` through `s6-j8`.
 
 ---
 
@@ -396,3 +407,5 @@ Then re-upload (delete the old dataset in LangSmith UI first, or bump the datase
 **To extend ranking_golden.jsonl:**
 
 Add a scenario with a `profile`, 8 jobs in `inputs.jobs`, and 1–3 expected top IDs in `outputs.expected_top_ids`. Keep `expected_top_ids` to ≤3 entries so `precision_at_3` can reach 1.0.
+
+**ID rule (non-negotiable):** prefix every job ID with the scenario number — `s6-j1` through `s6-j8` for Scenario 6. Never reuse a bare `j1`–`j8` ID. The `extract_node` caches extractions by job ID in MongoDB; reusing IDs across scenarios causes the first scenario's extraction to poison all later ones that share the same ID, regardless of how different the job descriptions are. See the [Job ID convention](#job-id-convention----why-ids-are-prefixed-s1--s2-) section for the full incident.
