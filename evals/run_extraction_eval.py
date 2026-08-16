@@ -44,6 +44,33 @@ def extraction_target(inputs: dict) -> dict:
     }
 
 
+THRESHOLDS = {
+    "skill_overlap":    0.75,
+    "seniority_match":  0.80,
+    "remote_match":     0.90,
+    "latam_match":      0.90,
+}
+
+
+def _check_thresholds(results) -> bool:
+    scores: dict[str, list[float]] = {}
+    for ex in results._results:
+        for r in ex["evaluation_results"]["results"]:
+            if r.score is not None:
+                scores.setdefault(r.key, []).append(r.score)
+
+    print("\nResults:")
+    failed = False
+    for key, threshold in THRESHOLDS.items():
+        vals = scores.get(key, [])
+        avg = sum(vals) / len(vals) if vals else 0.0
+        status = "PASS" if avg >= threshold else "FAIL"
+        if avg < threshold:
+            failed = True
+        print(f"  {status}  {key}: {avg:.2f}  (threshold >= {threshold:.2f})")
+    return failed
+
+
 if __name__ == "__main__":
     results = evaluate(
         extraction_target,
@@ -52,5 +79,8 @@ if __name__ == "__main__":
         experiment_prefix="extraction",
         max_concurrency=3,
     )
-    print("\nExperiment complete.")
-    print("View results at: https://smith.langchain.com (Experiments tab)")
+    failed = _check_thresholds(results)
+    print("\nView results at: https://smith.langchain.com (Experiments tab)")
+    if failed:
+        print("REGRESSION DETECTED — one or more metrics below threshold")
+        sys.exit(1)

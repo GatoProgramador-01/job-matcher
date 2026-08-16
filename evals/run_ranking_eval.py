@@ -55,6 +55,30 @@ def ranking_target(inputs: dict) -> dict:
     }
 
 
+THRESHOLDS = {
+    "precision_at_3": 1.0,
+}
+
+
+def _check_thresholds(results) -> bool:
+    scores: dict[str, list[float]] = {}
+    for ex in results._results:
+        for r in ex["evaluation_results"]["results"]:
+            if r.score is not None:
+                scores.setdefault(r.key, []).append(r.score)
+
+    print("\nResults:")
+    failed = False
+    for key, threshold in THRESHOLDS.items():
+        vals = scores.get(key, [])
+        avg = sum(vals) / len(vals) if vals else 0.0
+        status = "PASS" if avg >= threshold else "FAIL"
+        if avg < threshold:
+            failed = True
+        print(f"  {status}  {key}: {avg:.2f}  (threshold >= {threshold:.2f})")
+    return failed
+
+
 if __name__ == "__main__":
     results = evaluate(
         ranking_target,
@@ -62,5 +86,8 @@ if __name__ == "__main__":
         evaluators=[precision_at_3],
         experiment_prefix="ranking",
     )
-    print("\nExperiment complete.")
-    print("View results at: https://smith.langchain.com (Experiments tab)")
+    failed = _check_thresholds(results)
+    print("\nView results at: https://smith.langchain.com (Experiments tab)")
+    if failed:
+        print("REGRESSION DETECTED — one or more metrics below threshold")
+        sys.exit(1)
